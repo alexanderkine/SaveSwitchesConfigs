@@ -6,6 +6,7 @@ from netmiko import (
 )
 from datetime import datetime
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 # Configuration options
 print('Конфигурации сохраняются в папке вида CiscoBackups_<date>\n')
@@ -29,8 +30,7 @@ def parse_devices_file(path):
 stations = ('Динамо', 'Уральская', 'Машиностроителей', 'Уралмаш', 'Проспект Космонавтов', 'Площадь 1905 года', 'Геологическая', 'Депо', 'Инженерный корпус', 'Чкаловская', 'Ботаническая')   
 devices_file = parse_devices_file('devices' if devices_path == '' else f'{devices_path}')
 symbol = "" if backup_path == "" else "/"
-current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-folder_path = f"{backup_path}{symbol}CiscoBackups_{current_date}".strip()
+folder_path = f'{backup_path}{symbol}CiscoBackups_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'.strip()
 os.mkdir(folder_path)
 os.chdir(folder_path)
 
@@ -54,14 +54,20 @@ def connect_and_save_output(device):
 def save_config_from_device(station_folder, ip):
     device =  { 'device_type':'cisco_ios_telnet', 'ip':ip, 'username':'root', 'password':'root', 'port': 23}
     output = connect_and_save_output(device)
+    current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     # сохранение конфигурации в файл
     with open(f'{station_folder}\{ip} ({output[1]}_backup_{current_date}.txt', 'w') as file:
         file.write(output[0])
         
     print(f'{station_folder} {ip} успешно сохранено!')
+    
+with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = []
+    for ip in devices_file:    
+        station_number = ip.split('.')[1]
+        station_folder = stations[int(station_number) - 1]
+        futures.append(executor.submit(save_config_from_device, station_folder, ip))
 
-for ip in devices_file:	
-    station_number = ip.split('.')[1]
-    station_folder = stations[int(station_number) - 1]
-    save_config_from_device(station_folder, ip)
-
+    # Ожидаем завершения всех потоков
+    for future in futures:
+        future.result()
