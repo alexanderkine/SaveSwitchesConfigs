@@ -7,7 +7,8 @@ from netmiko import (
 from datetime import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QLineEdit, QMessageBox, QFileDialog
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import QCoreApplication, Qt
 
 class BackupApp(QWidget):
     def __init__(self):
@@ -18,6 +19,11 @@ class BackupApp(QWidget):
         self.setWindowTitle('Cisco Backup Tool')
 
         self.layout = QVBoxLayout()
+        
+        self.label = QLabel(self)
+        self.label.setText('Сохранение конфигураций коммутаторов')
+        self.label.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.label)
 
         # Поле для ввода пути сохранения конфигураций
         self.backup_path_input = QLineEdit(self)
@@ -128,6 +134,6 @@ class BackupApp(QWidget):
 if __name__ == '__main__':
     app = QApplication([])
     backup_app = BackupApp()
-    backup_app.resize(400, 200)
+    backup_app.resize(400, 400)
     backup_app.show()
     app.exec_()
