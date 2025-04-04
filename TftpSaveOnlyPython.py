@@ -7,67 +7,104 @@ from netmiko import (
 from datetime import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QLineEdit, QMessageBox
 
-# Configuration options
-print('Конфигурации сохраняются в папке вида CiscoBackups_<date>\n')
-print('Введите абсолютный путь сохранения конфигураций (пустое поле означает сохранение по текущему месту скрипта) и нажмите <Enter>:')
-backup_path = input().strip()
-print('Введите абсолютный путь к файлу с IP коммутаторов (пустое поле означает файл c именем devices по текущему месту скрипта) и нажмите <Enter>:')
-devices_path = input().strip()
+class BackupApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
 
-def parse_devices_file(path):
-    devices_file = open(path, "r")
-    devices = []
-    while True:
-        ip = devices_file.readline().strip()
-        if not ip:
-            break
-        devices.append(ip)
-    devices_file.close()
+    def initUI(self):
+        self.setWindowTitle('Cisco Backup Tool')
 
-    return devices
+        self.layout = QVBoxLayout()
 
-stations = ('Динамо', 'Уральская', 'Машиностроителей', 'Уралмаш', 'Проспект Космонавтов', 'Площадь 1905 года', 'Геологическая', 'Депо', 'Инженерный корпус', 'Чкаловская', 'Ботаническая')   
-devices_file = parse_devices_file('devices' if devices_path == '' else f'{devices_path}')
-symbol = "" if backup_path == "" else "/"
-folder_path = f'{backup_path}{symbol}CiscoBackups_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'.strip()
-os.mkdir(folder_path)
-os.chdir(folder_path)
+        self.backup_path_input = QLineEdit(self)
+        self.backup_path_input.setPlaceholderText('Введите путь для сохранения конфигураций')
+        self.layout.addWidget(self.backup_path_input)
 
-for station in stations:
-        os.mkdir(f'{station}')
+        self.devices_path_input = QLineEdit(self)
+        self.devices_path_input.setPlaceholderText('Введите путь к файлу с IP коммутаторов')
+        self.layout.addWidget(self.devices_path_input)
 
-def connect_and_save_output(device):
-    try:
-        net_connect = ConnectHandler(**device)
-    except:
-        print(f'{station_folder} {ip} не было сохранено!')
-        pass
-    else:        
+        self.start_button = QPushButton('Начать резервное копирование', self)
+        self.start_button.clicked.connect(self.start_backup)
+        self.layout.addWidget(self.start_button)
+
+        self.setLayout(self.layout)
+
+    def parse_devices_file(self, path):
+        devices = []
+        with open(path, "r") as devices_file:
+            for line in devices_file:
+                devices.append(line.strip())
+        return devices
+
+    def connect_and_save_output(self, device):
+        try:
+            net_connect = ConnectHandler(**device)
             net_connect.enable()
             hostname = net_connect.find_prompt().strip('#')
             config_output = net_connect.send_command('show running-config')
             net_connect.disconnect()
+            return (config_output, hostname)
+        except Exception as e:
+            print(f'Ошибка подключения: {e}')
+            return (None, None)
 
-    return (config_output, hostname)
+    def save_config_from_device(self, station_folder, ip):
+        device = {
+            'device_type': 'cisco_ios_telnet',
+            'ip': ip,
+            'username': 'root',
+            'password': 'root',
+            'port': 23
+        }
+        output = self.connect_and_save_output(device)
+        if output[0] is not None:
+            current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            with open(f'{station_folder}/{ip} ({output[1]}_backup_{current_date}.txt', 'w') as file:
+                file.write(output[0])
+            print(f'{station_folder} {ip} успешно сохранено!')
+        else:
+            print(f'{station_folder} {ip} не было сохранено!')
 
-def save_config_from_device(station_folder, ip):
-    device =  { 'device_type':'cisco_ios_telnet', 'ip':ip, 'username':'root', 'password':'root', 'port': 23}
-    output = connect_and_save_output(device)
-    current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    # сохранение конфигурации в файл
-    with open(f'{station_folder}\{ip} ({output[1]}_backup_{current_date}.txt', 'w') as file:
-        file.write(output[0])
-        
-    print(f'{station_folder} {ip} успешно сохранено!')
-    
-with ThreadPoolExecutor(max_workers=10) as executor:
-    futures = []
-    for ip in devices_file:    
-        station_number = ip.split('.')[1]
-        station_folder = stations[int(station_number) - 1]
-        futures.append(executor.submit(save_config_from_device, station_folder, ip))
+    def start_backup(self):
+        backup_path = self.backup_path_input.text().strip()
+        devices_path = self.devices_path_input.text().strip()
 
-    # Ожидаем завершения всех потоков
-    for future in futures:
-        future.result()
+        if not backup_path:
+            backup_path = os.getcwd()
+        if not devices_path:
+            devices_path = 'devices'
+
+        stations = ('Динамо', 'Уральская', 'Машиностроителей', 'Уралмаш', 'Проспект Космонавтов', 
+                    'Площадь 1905 года', 'Геологическая', 'Депо', 'Инженерный корпус', 'Чкаловская', 
+                    'Ботаническая')
+
+        folder_path = f'{backup_path}/CiscoBackups_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+        os.mkdir(folder_path)
+
+        devices_file = self.parse_devices_file(devices_path)
+
+        for station in stations:
+            os.mkdir(f'{folder_path}/{station}')
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = []
+            for ip in devices_file:
+                station_number = ip.split('.')[1]
+                station_folder = f'{folder_path}/{stations[int(station_number) - 1]}'
+                futures.append(executor.submit(self.save_config_from_device, station_folder, ip))
+
+            for future in futures:
+                future.result()
+
+        QMessageBox.information(self, 'Завершено', 'Резервное копирование завершено!')
+
+if __name__ == '__main__':
+    app = QApplication([])
+    backup_app = BackupApp()
+    backup_app.resize(400, 200)
+    backup_app.show()
+    app.exec_()
