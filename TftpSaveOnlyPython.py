@@ -7,7 +7,7 @@ from netmiko import (
 from datetime import datetime
 import os
 from concurrent.futures import ThreadPoolExecutor
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QLineEdit, QMessageBox
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QLineEdit, QMessageBox, QFileDialog
 
 class BackupApp(QWidget):
     def __init__(self):
@@ -19,19 +19,42 @@ class BackupApp(QWidget):
 
         self.layout = QVBoxLayout()
 
+        # Поле для ввода пути сохранения конфигураций
         self.backup_path_input = QLineEdit(self)
         self.backup_path_input.setPlaceholderText('Введите путь для сохранения конфигураций')
         self.layout.addWidget(self.backup_path_input)
 
+        # Кнопка для выбора папки сохранения
+        self.backup_path_button = QPushButton('Выбрать папку для сохранения', self)
+        self.backup_path_button.clicked.connect(self.select_backup_path)
+        self.layout.addWidget(self.backup_path_button)
+
+        # Поле для ввода пути к файлу с IP
         self.devices_path_input = QLineEdit(self)
         self.devices_path_input.setPlaceholderText('Введите путь к файлу с IP коммутаторов')
         self.layout.addWidget(self.devices_path_input)
 
+        # Кнопка для выбора файла с IP
+        self.devices_path_button = QPushButton('Выбрать файл с IP', self)
+        self.devices_path_button.clicked.connect(self.select_devices_path)
+        self.layout.addWidget(self.devices_path_button)
+
+        # Кнопка для начала резервного копирования
         self.start_button = QPushButton('Начать резервное копирование', self)
         self.start_button.clicked.connect(self.start_backup)
         self.layout.addWidget(self.start_button)
 
         self.setLayout(self.layout)
+
+    def select_backup_path(self):
+        path = QFileDialog.getExistingDirectory(self, 'Выберите папку для сохранения')
+        if path:
+            self.backup_path_input.setText(path)
+
+    def select_devices_path(self):
+        path, _ = QFileDialog.getOpenFileName(self, 'Выберите файл с IP', '', 'Text Files (*.txt);;All Files (*)')
+        if path:
+            self.devices_path_input.setText(path)
 
     def parse_devices_file(self, path):
         devices = []
